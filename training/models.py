@@ -152,11 +152,11 @@ def compute_class_weights(dataset):
     sentiment_counts = torch.zeros(3)
 
     skipped = 0
-    total = 0
+    total = len(dataset)
 
     print("Counting Class Distributions...")
 
-    for i in range(total):
+    for i in tqdm(range(total), desc="Counting Class Distributions"):
         sample = dataset[i]
 
         if sample is None:
