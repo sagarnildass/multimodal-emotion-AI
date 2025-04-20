@@ -1,4 +1,4 @@
-from torch.utils.data import Dataset
+from torch.utils.data import Dataset, DataLoader
 import pandas as pd
 from transformers import AutoTokenizer
 import os
@@ -7,6 +7,7 @@ import numpy as np
 import torch
 import torchaudio
 import subprocess
+os.environ["TOKENIZERS_PARALLELISM"] = "false"
 
 class MELDDataset(Dataset):
     def __init__(self, csv_path: str, video_dir: str):
@@ -166,8 +167,42 @@ class MELDDataset(Dataset):
         except Exception as e:
             print(f"Error processing {path}: {str(e)}")
             return None
+        
+def collate_fn(batch):
+    # Remove None values from batch
+    batch = list(filter(None, batch))
+    return torch.utils.data.dataloader.default_collate(batch)
+    
+def prepare_dataloaders(train_csv, train_video_dir,
+                        dev_csv, dev_video_dir, 
+                        test_csv, test_video_dir,
+                        batch_size=32):
+    
+    train_dataset = MELDDataset(train_csv, train_video_dir)
+    dev_dataset = MELDDataset(dev_csv, dev_video_dir)
+    test_dataset = MELDDataset(test_csv, test_video_dir)
+
+    train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True, collate_fn=collate_fn)
+    dev_loader = DataLoader(dev_dataset, batch_size=batch_size, collate_fn=collate_fn)
+    test_loader = DataLoader(test_dataset, batch_size=batch_size, collate_fn=collate_fn)
+
+    return train_loader, dev_loader, test_loader
+    
 
 if __name__ == "__main__":
-    meld = MELDDataset("../dataset/dev/dev_sent_emo.csv", "../dataset/dev/dev_splits_complete")
-    print(meld[0])
-    
+    train_loader, dev_loader, test_loader = prepare_dataloaders(
+        train_csv="../dataset/train/train_sent_emo.csv",
+        train_video_dir="../dataset/train/train_splits",
+        dev_csv="../dataset/dev/dev_sent_emo.csv",
+        dev_video_dir="../dataset/dev/dev_splits_complete",
+        test_csv="../dataset/test/test_sent_emo.csv",
+        test_video_dir="../dataset/test/output_repeated_splits_test"
+    )
+
+    for batch in train_loader:
+        print(batch["text_inputs"])
+        print(batch["video_frames"].shape)
+        print(batch["audio_features"].shape)
+        print(batch["emotion_label"])
+        print(batch["sentiment_label"])
+        break
