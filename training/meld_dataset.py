@@ -73,9 +73,10 @@ class MELDDataset(Dataset):
         else:
             frames = frames[:30]
 
-        # Before Permute: (30, 224, 224, 3)
+        # Before Permute: (30, 224, 224, 3)  
         # After Permute: (30, 3, 224, 224)
-        return torch.FloatTensor(np.array(frames)).permute(0, 3, 1, 2)
+        
+        return torch.FloatTensor(np.array(frames)).permute(0, 3, 1, 2) # If you want (3, 30, 224, 224) then use .permute(3, 0, 1, 2)
 
     def _extract_audio_features(self, video_path):
         audio_path = video_path.replace(".mp4", ".wav")
