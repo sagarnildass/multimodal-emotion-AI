@@ -3,6 +3,7 @@ import torch
 from transformers import BertModel
 from torchvision import models as vision_models
 from meld_dataset import MELDDataset
+from tqdm import tqdm
 from sklearn.metrics import precision_score, accuracy_score
 from torch.utils.tensorboard import SummaryWriter
 from datetime import datetime
@@ -146,6 +147,56 @@ class MultimodalSentimentModel(nn.Module):
             "sentiment_output": sentiment_output
         }
     
+def compute_class_weights(dataset):
+    emotion_counts = torch.zeros(7)
+    sentiment_counts = torch.zeros(3)
+
+    skipped = 0
+    total = 0
+
+    print("Counting Class Distributions...")
+
+    for i in range(total):
+        sample = dataset[i]
+
+        if sample is None:
+            skipped += 1
+            continue
+
+        emotion_label = sample["emotion_label"]
+        sentiment_label = sample["sentiment_label"]
+
+        emotion_counts[emotion_label] += 1
+        sentiment_counts[sentiment_label] += 1
+
+    valid = total - skipped
+
+    print(f"Skipped {skipped} samples out of {total}")
+
+    print("\nClass Distributions:")
+    print("Emotions:")
+    emotion_map = {0: "anger", 1: "disgust", 2: "fear", 3: "joy", 4: "neutral", 5: "sadness", 6: "surprise"}
+
+    for i, count in enumerate(emotion_counts):
+        print(f"{emotion_map[i]}: {count/valid:.2%}")
+
+    print("\nSentiments:")
+    sentiment_map = {0: "negative", 1: "neutral", 2: "positive"}
+
+    for i, count in enumerate(sentiment_counts):
+        print(f"{sentiment_map[i]}: {count/valid:.2%}")
+
+    # Calculate class weights
+    emotion_weights = 1.0 / emotion_counts
+    sentiment_weights = 1.0 / sentiment_counts
+
+    # Normalize weights
+    emotion_weights = emotion_weights / emotion_weights.sum()
+    sentiment_weights = sentiment_weights / sentiment_weights.sum()
+
+    return emotion_weights, sentiment_weights
+        
+    
 class MultimodalTrainer:
     def __init__(self, model, train_loader, val_loader):
         self.model = model
@@ -183,9 +234,21 @@ class MultimodalTrainer:
 
         self.current_train_losses = None
 
+        # Compute class weights
+        print("Computing Class Weights...")
+        emotion_weights, sentiment_weights = compute_class_weights(self.train_loader.dataset)
+
+        self.device = next(self.model.parameters()).device
+
+        self.emotion_weights = emotion_weights.to(self.device)
+        self.sentiment_weights = sentiment_weights.to(self.device)
+
+        print("Emotion Weights on device: ", self.emotion_weights.device)
+        print("Sentiment Weights on device: ", self.sentiment_weights.device)
+
         # Loss Function
-        self.emotion_criterion = nn.CrossEntropyLoss(label_smoothing=0.05)
-        self.sentiment_criterion = nn.CrossEntropyLoss(label_smoothing=0.05)
+        self.emotion_criterion = nn.CrossEntropyLoss(label_smoothing=0.05, weight=self.emotion_weights)
+        self.sentiment_criterion = nn.CrossEntropyLoss(label_smoothing=0.05, weight=self.sentiment_weights)
 
     def log_metrics(self, losses, metrics=None, phase="train"):
         if phase == "train":
@@ -209,7 +272,7 @@ class MultimodalTrainer:
         self.model.train()
         running_loss = {"total": 0.0, "emotion": 0.0, "sentiment": 0.0}
         
-        for batch in self.train_loader:
+        for batch in tqdm(self.train_loader, desc="Training"):
             device = next(self.model.parameters()).device
             text_inputs = {
                 "input_ids": batch["text_inputs"]["input_ids"].to(device),
@@ -267,7 +330,7 @@ class MultimodalTrainer:
         all_sentiment_labels = []
 
         with torch.inference_mode():
-            for batch in data_loader:
+            for batch in tqdm(data_loader, desc=f"{phase} Evaluation"):
                 device = next(self.model.parameters()).device
 
                 text_inputs = {
