@@ -1,2 +1,5 @@
 dataset/
 MELD.Raw.tar.gz
+runs/
+models/
+*.pth
