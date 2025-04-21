@@ -62,6 +62,7 @@ def main():
     metrics_data = {
         "train_losses": [],
         "val_losses": [],
+        "test_losses": [],
         "epochs": [],
     }
 
