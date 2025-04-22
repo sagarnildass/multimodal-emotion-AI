@@ -3,3 +3,5 @@ MELD.Raw.tar.gz
 runs/
 models/
 *.pth
+model_normalized/
+*.mp4
