@@ -8,9 +8,7 @@ import torchaudio
 import whisper
 from transformers import AutoTokenizer
 import sys
-import json
-import boto3
-import tempfile
+
 
 EMOTION_MAP = {0: "anger", 1: "disgust", 2: "fear",
                3: "joy", 4: "neutral", 5: "sadness", 6: "surprise"}
@@ -215,30 +213,6 @@ class VideoUtteranceProcessor:
 
         return segment_path
 
-def download_from_s3(s3_uri):
-    s3_client = boto3.client("s3")
-    bucket = s3_uri.split("/")[2]
-    key = "/".join(s3_uri.split("/")[3:])
-
-    with tempfile.NamedTemporaryFile(delete=False, suffix=".mp4") as temp_file:
-        s3_client.download_file(bucket, key, temp_file.name)
-        return temp_file.name
-
-
-def input_fn(request_body, request_content_type):
-    if request_content_type == "application/json":
-        input_data = json.loads(request_body)
-        s3_uri = input_data['video_path']
-        local_path = download_from_s3(s3_uri)
-        return {"video_path": local_path}
-    raise ValueError(f"Unsupported content type: {request_content_type}")
-
-
-def output_fn(prediction, response_content_type):
-    if response_content_type == "application/json":
-        return json.dumps(prediction)
-    raise ValueError(f"Unsupported content type: {response_content_type}")
-
 
 def model_fn(model_dir):
     # Load the model for inference
@@ -266,7 +240,7 @@ def model_fn(model_dir):
         'tokenizer': AutoTokenizer.from_pretrained('bert-base-uncased'),
         'transcriber': whisper.load_model(
             "base",
-            device="cpu" if device.type == "cpu" else device,
+            device=device,
         ),
         'device': device
     }
